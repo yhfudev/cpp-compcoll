@@ -30,16 +30,23 @@
 #define PRIiOFF PRIx64 /*"lld"*/
 #define PRIuOFF PRIx64 /*"llu"*/
 
-
+#ifndef DEBUG
 #define DEBUG 0
+#endif
 
 #if DEBUG
-#define TRACE printf
-#define DBGMSG(catlog, level, fmt, ...) printf ("[%s()]\t" fmt "\t{%d," __FILE__ "}\n", __func__, ##__VA_ARGS__, __LINE__)
+#define USE_OUT_ED_TABLE 1
+
+#define TRACE(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__)
+#define DBGMSG(catlog, level, fmt, ...) fprintf (stderr, "[%s()]\t" fmt "\t{%d," __FILE__ "}\n", __func__, ##__VA_ARGS__, __LINE__)
 #else
+#define USE_OUT_ED_TABLE 0
 #define TRACE(...)
 #define DBGMSG(...)
 #endif
+
+#undef USE_OUT_ED_TABLE
+#define USE_OUT_ED_TABLE 0
 
 
 /**********************************************************************************/
@@ -357,7 +364,7 @@ uni_to_utf8 (size_t val, uint8_t *buf, size_t szbuf)
 
 // 操作UTF8字串的接口
 
-typedef int (* strcmp_cb_output_t) (void *userdata, int right, size_t idx); /* idx -- the index of the string; right -- 0 -- `left' string, 1 -- `right' string */
+typedef int (* strcmp_cb_output_t) (void *userdata, FILE *fp, int right, size_t idx); /* idx -- the index of the string; right -- 0 -- `left' string, 1 -- `right' string */
 
 typedef int (* strcmp_cb_comp_t) (void *userdata, size_t idx1, size_t idx2); /* idx1 -- the index of the `left' string; idx2 -- right */
 typedef int (* strcmp_cb_length_t) (void *userdata, int right); /* 0 -- `left' string, 1 -- `right' string */
@@ -390,6 +397,32 @@ typedef struct _strcmp_t {
 
 
 #define MIN(a,b) (((a)<(b))?(a):(b))
+
+
+
+const char *
+edaction_val2cstr (char val)
+{
+    switch (val) {
+    case EDIS_NONE:
+        return ("x");
+        break;
+    case EDIS_INSERT:
+        return ("S");
+        break;
+    case EDIS_DELETE:
+        return ("D");
+        break;
+    case EDIS_REPLAC:
+        return ("R");
+        break;
+    case EDIS_IGNORE:
+        return ("I");
+        break;
+    }
+    return "?";
+}
+
 
 
 /**
@@ -463,7 +496,7 @@ ed_edit_distance (strcmp_t *cmpinfo)
     assert (NULL != cmpinfo->cb_matget);
     assert (NULL != cmpinfo->cb_matset);
     assert (NULL != cmpinfo->cb_matresz);
-#if DEBUG
+#if USE_OUT_ED_TABLE
     assert (NULL != cmpinfo->cb_output);
     assert (NULL != cmpinfo->cb_getval);
 #endif
@@ -490,34 +523,41 @@ ed_edit_distance (strcmp_t *cmpinfo)
     // 设置行缓冲
     cmpinfo->cb_matresz (cmpinfo->userdata_matrix, 1, cmpinfo->cb_len(cmpinfo->userdata_str, 0) + 1);
 
-#if DEBUG
-    TRACE (" |   |");
+#if USE_OUT_ED_TABLE
+    // 用于记录操作, 只做显示用
+    char action = EDIS_NONE;
+    cmpinfo->cb_matresz (cmpinfo->userdata_matrix2, 1, cmpinfo->cb_len(cmpinfo->userdata_str, 0) + 1);
+
+    TRACE ("    |    |");
     for (i = 0; i < cmpinfo->cb_len(cmpinfo->userdata_str, 0); i ++) {
         TRACE (" ");
-        cmpinfo->cb_output (cmpinfo->userdata_str, 0, i);
+        cmpinfo->cb_output (cmpinfo->userdata_str, stderr, 0, i);
         TRACE (" |");
     }
     TRACE ("\n");
-    TRACE (" |");
+    TRACE ("    |");
 #endif
     for (i = 0; i <= cmpinfo->cb_len(cmpinfo->userdata_str, 0); i ++) {
         cmpinfo->cb_matset (cmpinfo->userdata_matrix, 0, i, i);
-#if DEBUG
-        TRACE ("% 3d|", i);
+#if USE_OUT_ED_TABLE
+        TRACE (" %2d |", i);
 #endif
     }
-#if DEBUG
+#if USE_OUT_ED_TABLE
     TRACE ("\n");
 #endif
     for (i = 1; i <= cmpinfo->cb_len(cmpinfo->userdata_str, 1); i ++) {
         crossval = i - 1;
-#if DEBUG
-        cmpinfo->cb_output (cmpinfo->userdata_str, 1, i-1);
-        TRACE ("|");
-        TRACE ("% 3d|", i);
+#if USE_OUT_ED_TABLE
+        TRACE (" ");
+        cmpinfo->cb_output (cmpinfo->userdata_str, stderr, 1, i-1);
+        TRACE (" |");
+        TRACE (" %2d |", i);
 #endif
         for (j = 1; j <= cmpinfo->cb_len(cmpinfo->userdata_str, 0); j ++) {
-
+#if USE_OUT_ED_TABLE
+            action = EDIS_NONE;
+#endif
             /* matrix[i-1][j] + 1 */
             pi = 1 + cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, j); /* 之前的一行刷新后不再需要了，所以可以重复使用这行的缓冲 */
 
@@ -533,16 +573,37 @@ ed_edit_distance (strcmp_t *cmpinfo)
             //pr = crossval + (strb[i - 1] == stra[j - 1]?0:1);
             pr = crossval + ((0 == cmpinfo->cb_comp(cmpinfo->userdata_str, j - 1, i - 1))?0:1);
 
+#if USE_OUT_ED_TABLE
+            if (pi > pd) {
+                action = EDIS_DELETE;
+            } else {
+                action = EDIS_INSERT;
+            }
+#endif
             pi = MIN (pi, pd);
+
+#if USE_OUT_ED_TABLE
+            if (pi > pr) {
+                action = EDIS_REPLAC;
+            }
+#endif
             //crossval = g_matrix[j];
             crossval = cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, j);  /* crossval 存储左上角的数据值，因为前一行的数据将被冲掉，该值是唯一需要保存的 */
             //g_matrix[j] = MIN (pi, pr);
             cmpinfo->cb_matset (cmpinfo->userdata_matrix, 0, j, MIN (pi, pr));
-#if DEBUG
-            TRACE ("% 3d|", cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, j));
+#if USE_OUT_ED_TABLE
+            cmpinfo->cb_matset (cmpinfo->userdata_matrix2, 0, j, action);
+            TRACE (" %2d |", cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, j));
 #endif
         }
-#if DEBUG
+#if USE_OUT_ED_TABLE
+        TRACE ("\n");
+        TRACE ("----|----|");
+        for (j = 1; j <= cmpinfo->cb_len(cmpinfo->userdata_str, 0); j ++) {
+            TRACE ("^ ");
+            TRACE ("%s", edaction_val2cstr (cmpinfo->cb_matget (cmpinfo->userdata_matrix2, 0, j)));
+            TRACE ("^|");
+        }
         TRACE ("\n");
 #endif
     }
@@ -594,6 +655,8 @@ ed_edit_distance_path (strcmp_t *cmpinfo, char *path, size_t *ret_numpath)
     assert (NULL != ret_numpath);
     lena = cmpinfo->cb_len(cmpinfo->userdata_str, 0);
     lenb = cmpinfo->cb_len(cmpinfo->userdata_str, 1);
+    assert (lena >= 0);
+    assert (lena >= 0);
     if (lena < 1) {
         for (i = 0; i < lenb; i ++) {
             path[i] = EDIS_INSERT;
@@ -615,7 +678,7 @@ ed_edit_distance_path (strcmp_t *cmpinfo, char *path, size_t *ret_numpath)
         /*g_matrix_val[0][i] = i; */
         /*g_matrix_dir[0][i] = EDIS_INSERT; */
         cmpinfo->cb_matset (cmpinfo->userdata_matrix,  0, i, i);
-        cmpinfo->cb_matset (cmpinfo->userdata_matrix2, 0, i, EDIS_INSERT);
+        cmpinfo->cb_matset (cmpinfo->userdata_matrix2, 0, i, EDIS_DELETE);
     }
     for (i = 0; i <= lenb; i ++) {
         //g_matrix_val[i* (lena + 1)] = i;
@@ -682,13 +745,68 @@ ed_edit_distance_path (strcmp_t *cmpinfo, char *path, size_t *ret_numpath)
             }
         }
     }
+#if USE_OUT_ED_TABLE
+    TRACE ("----|----|");
+    for (i = 0; i < lena; i ++) {
+        TRACE (" ");
+        cmpinfo->cb_output (cmpinfo->userdata_str, stderr, 0, i);
+        TRACE (" |");
+    }
+    TRACE ("\n");
+    TRACE ("----|");
+    for (i = 0; i <= lena; i ++) {
+        TRACE (" %2d |", cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, i));
+    }
+    TRACE ("\n");
+    TRACE ("----|");
+    i = 0;
+    for (j = 0; j <= cmpinfo->cb_len(cmpinfo->userdata_str, 0); j ++) {
+        TRACE ("^ ");
+        TRACE ("%s", edaction_val2cstr (cmpinfo->cb_matget (cmpinfo->userdata_matrix2, i, j)));
+        TRACE ("^|");
+    }
+    TRACE ("\n");
+    for (i = 1; i <= lenb; i ++) {
+        TRACE (" ");
+        cmpinfo->cb_output (cmpinfo->userdata_str, stderr, 1, i-1);
+        TRACE (" |");
+        //TRACE ("% 3d|", i);
+        j = 0; TRACE (" %2d |", cmpinfo->cb_matget (cmpinfo->userdata_matrix, i, j));
+        for (j = 1; j <= lena; j ++) {
+            //g_matrix_dir[i * (lena + 1) + j]
+            TRACE (" %2d |", cmpinfo->cb_matget (cmpinfo->userdata_matrix, i, j));
+        }
+        TRACE ("\n");
+        TRACE ("----|");
+        for (j = 0; j <= cmpinfo->cb_len(cmpinfo->userdata_str, 0); j ++) {
+            TRACE ("^ ");
+            TRACE ("%s", edaction_val2cstr (cmpinfo->cb_matget (cmpinfo->userdata_matrix2, i, j)));
+            TRACE ("^|");
+        }
+        TRACE ("\n");
+    }
+#endif
     i = lenb;
     j = lena;
+    assert (i > 0);
+    assert (j > 0);
     for (pi = lena + lenb; pi > 0; pi --) {
+        if (i < 0 || j < 0) {
+            DBGMSG (PFDBG_CATLOG_PF, PFDBG_LEVEL_ERROR, "Implementation bug!!");
+            DBGMSG (PFDBG_CATLOG_PF, PFDBG_LEVEL_ERROR, "The i,j overflow: lena(%d)+lenb(%d)=(%d), pi(%d), pi(%d), pi(%d)", lena, lenb, lena + lenb, pi, i, j);
+            assert (pi >= 0);
+            assert (i >= 0);
+            assert (j >= 0);
+            assert (0);
+            break;
+        }
         if (EDIS_NONE == cmpinfo->cb_matget (cmpinfo->userdata_matrix2, i, j) ) {
             break;
         }
         path[pi - 1] = cmpinfo->cb_matget (cmpinfo->userdata_matrix2, i, j);
+#if USE_OUT_ED_TABLE
+        TRACE ("path[%d]: %s, (i,j) from (%d,%d)", pi, edaction_val2cstr(path[pi - 1]), i, j);
+#endif
         switch (path[pi - 1]) {
         case EDIS_INSERT:
             i --;
@@ -706,59 +824,23 @@ ed_edit_distance_path (strcmp_t *cmpinfo, char *path, size_t *ret_numpath)
             assert (0);
             break;
         }
+#if USE_OUT_ED_TABLE
+        TRACE ("to (%d,%d)\n", i, j);
+#endif
     }
     if (pi > 0) {
         memmove (path, &(path[pi]), sizeof (char) * (lena + lenb - pi));
     }
     *ret_numpath = lena + lenb - pi;
-#if DEBUG
-    TRACE (" |   |");
-    for (i = 0; i < lena; i ++) {
-        TRACE (" ");
-        cmpinfo->cb_output (cmpinfo->userdata_str, 0, i);
-        TRACE (" |");
-    }
-    TRACE ("\n");
-    TRACE (" |");
-    for (i = 0; i <= lena; i ++) {
-        TRACE ("% 3d|", cmpinfo->cb_matget (cmpinfo->userdata_matrix, 0, i));
-    }
-    TRACE ("\n");
-    for (i = 1; i <= lenb; i ++) {
-        cmpinfo->cb_output (cmpinfo->userdata_str, 1, i-1);
-        TRACE ("|");
-        //TRACE ("% 3d|", i);
-        j = 0; TRACE ("% 3d|", cmpinfo->cb_matget (cmpinfo->userdata_matrix, i, j));
-        for (j = 1; j <= lena; j ++) {
-            //g_matrix_dir[i * (lena + 1) + j]
-            TRACE ("% 3d|", cmpinfo->cb_matget (cmpinfo->userdata_matrix, i, j));
-        }
-        TRACE ("\n");
-    }
+#if USE_OUT_ED_TABLE
     assert (NULL != path);
     //printf ("convert from string 1: %s\nTO %s\n", stra, strb);
-    printf ("path: ");
+    TRACE ("path: ");
     for (i = 0; i < *ret_numpath; i ++) {
-        switch (path[i]) {
-        case EDIS_NONE:
-            printf ("0");
-            break;
-        case EDIS_INSERT:
-            printf ("S");
-            break;
-        case EDIS_DELETE:
-            printf ("D");
-            break;
-        case EDIS_REPLAC:
-            printf ("R");
-            break;
-        case EDIS_IGNORE:
-            printf ("I");
-            break;
-        }
-        printf (" ");
+        TRACE ("%s", edaction_val2cstr (path[i]));
+        TRACE (" ");
     }
-    printf ("\n");
+    TRACE ("\n");
 #endif
     return cmpinfo->cb_matget (cmpinfo->userdata_matrix, lenb, lena);
 }
@@ -853,11 +935,11 @@ typedef struct _twocstr_t {
 
 /* idx -- the index of the string; right -- 0 -- `left' string, 1 -- `right' string */
 int
-strcmp_output_cstr (void *userdata, int right, size_t idx)
+strcmp_output_cstr (void *userdata, FILE *fp, int right, size_t idx)
 {
     twocstr_t * ptcs = (twocstr_t *)userdata;
     assert (NULL != userdata);
-    return printf ("%c", ptcs->str[right % 2][idx]);
+    return fprintf (fp, "%c", ptcs->str[right % 2][idx]);
 }
 
 /* idx1 -- the index of the `left' string; idx2 -- right */
@@ -976,14 +1058,24 @@ wcspair_clear (wcstrpair_t *wp)
 
 /* idx -- the index of the string; right -- 0 -- `left' string, 1 -- `right' string */
 int
-strcmp_output_utf8fp (void *userdata, int right, size_t idx)
+strcmp_output_utf8fp (void *userdata, FILE *fp, int right, size_t idx)
 {
     uint8_t buffer[10];
     wcstrpair_t * ptcs = (wcstrpair_t *)userdata;
     assert (NULL != userdata);
     memset (buffer, 0, sizeof(buffer));
-    uni_to_utf8 (ptcs->str[right % 2][idx], buffer, sizeof(buffer) - 1);
-    return printf ("%s", buffer);
+    switch (ptcs->str[right % 2][idx]) {
+    case '\r':
+        sprintf ((char *)buffer, "\\r");
+        break;
+    case '\n':
+        sprintf ((char *)buffer, "\\n");
+        break;
+    default:
+        uni_to_utf8 (ptcs->str[right % 2][idx], buffer, sizeof(buffer) - 1);
+        break;
+    }
+    return fprintf (fp, "%2s", buffer);
 }
 
 /* idx1 -- the index of the `left' string; idx2 -- right */
@@ -1087,38 +1179,6 @@ load_file (wcstrpair_t *wp, int right, FILE *fp)
     return 0;
 }
 
-#define HTML_OUT_HEADER \
-    "<!DOCTYPE html>" "\n" \
-    "<html>" "\n" \
-    "<head>" "\n" \
-    "<meta charset='utf-8' />" "\n" \
-    "<style>" "\n" \
-    "  ins {" "\n" \
-    "    color:purple;" "\n" \
-    "  }" "\n" \
-    "  del," "\n" \
-    "  strike {" "\n" \
-    "    color:grey;" "\n" \
-    "    text-decoration: none;" "\n" \
-    "    line-height: 1.4;" "\n" \
-    "    background-image: -webkit-gradient(linear, left top, left bottom, from(transparent), color-stop(0.63em, transparent), color-stop(0.63em, #ff0000), color-stop(0.7em, #ff0000), color-stop(0.7em, transparent), to(transparent));" "\n" \
-    "    background-image: -webkit-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
-    "    background-image: -o-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
-    "    background-image: linear-gradient(to bottom, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
-    "    -webkit-background-size: 1.4em 1.4em;" "\n" \
-    "    background-size: 1.4em 1.4em;" "\n" \
-    "    background-repeat: repeat;" "\n" \
-    "  }" "\n" \
-    "</style>" "\n" \
-    "<title></title>" "\n" \
-    "</head>" "\n" \
-    "<body>"
-
-
-#define HTML_OUT_TAIL \
-    "</body>" "\n" \
-    "</html>"
-
 void generate_compare_file(wcstrpair_t *wp)
 {
     int i;
@@ -1149,14 +1209,13 @@ void generate_compare_file(wcstrpair_t *wp)
         return;
     }
 
-#if DEBUG
+#if USE_OUT_ED_TABLE
     ret = ed_edit_distance (&cmpinfo);
     fprintf (stderr, "different sites 1 = %d\n", ret);
 #endif
     ret = ed_edit_distance_path (&cmpinfo, path, &szpath);
     fprintf (stderr, "different sites = %d\n", ret);
 
-    printf ("%s\n", HTML_OUT_HEADER);
     int x = 0; // index of string 1
     int y = 0; // index of string 2
     wchar_t val = 0;
@@ -1169,31 +1228,31 @@ void generate_compare_file(wcstrpair_t *wp)
         case EDIS_INSERT:
             val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
             printf ("<ins>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, 1, y);
+            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 1, y);
             printf ("</ins>");
             y ++;
             break;
         case EDIS_DELETE:
             val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
             printf ("<del>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, 0, x);
+            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
             printf ("</del>");
             x ++;
             break;
         case EDIS_REPLAC:
             val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
             printf ("<del>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, 0, x);
+            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
             printf ("</del>");
             x ++;
             printf ("<ins>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, 1, y);
+            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 1, y);
             printf ("</ins>");
             y ++;
             break;
         case EDIS_IGNORE:
             val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
-            cmpinfo.cb_output (cmpinfo.userdata_str, 0, x);
+            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
             x ++;
             y ++;
             break;
@@ -1202,12 +1261,43 @@ void generate_compare_file(wcstrpair_t *wp)
             printf ("<br />");
         }
     }
-    printf ("\n%s\n", HTML_OUT_TAIL);
 
     mymat_clear (&mat1);
     mymat_clear (&mat2);
     free (path);
 }
+
+#define HTML_OUT_HEADER \
+    "<!DOCTYPE html>" "\n" \
+    "<html>" "\n" \
+    "<head>" "\n" \
+    "<meta charset='utf-8' />" "\n" \
+    "<style>" "\n" \
+    "  ins {" "\n" \
+    "    color:purple;" "\n" \
+    "  }" "\n" \
+    "  del," "\n" \
+    "  strike {" "\n" \
+    "    color:grey;" "\n" \
+    "    text-decoration: none;" "\n" \
+    "    line-height: 1.4;" "\n" \
+    "    background-image: -webkit-gradient(linear, left top, left bottom, from(transparent), color-stop(0.63em, transparent), color-stop(0.63em, #ff0000), color-stop(0.7em, #ff0000), color-stop(0.7em, transparent), to(transparent));" "\n" \
+    "    background-image: -webkit-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
+    "    background-image: -o-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
+    "    background-image: linear-gradient(to bottom, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);" "\n" \
+    "    -webkit-background-size: 1.4em 1.4em;" "\n" \
+    "    background-size: 1.4em 1.4em;" "\n" \
+    "    background-repeat: repeat;" "\n" \
+    "  }" "\n" \
+    "</style>" "\n" \
+    "<title>compcoll Generated compare text</title>" "\n" \
+    "</head>" "\n" \
+    "<body>"
+
+
+#define HTML_OUT_TAIL \
+    "</body>" "\n" \
+    "</html>"
 
 int
 compare_files (char * filename1, char *filename2)
@@ -1234,7 +1324,15 @@ compare_files (char * filename1, char *filename2)
     load_file (&wpinfo, 0, fp1);
     load_file (&wpinfo, 1, fp2);
 
+    printf ("%s\n", HTML_OUT_HEADER);
+    printf ("<h3>Compared files:</h3>\n");
+    printf ("<table>");
+    printf ("<tr><td>original file:</td><td><b>%s</b><td/></tr>\n", filename1);
+    printf ("<tr><td>new file:</td>     <td><b>%s</b><td/></tr>\n", filename2);
+    printf ("</table>\n");
     generate_compare_file(&wpinfo);
+    printf ("\n%s\n", HTML_OUT_TAIL);
+
     wcspair_clear (&wpinfo);
 
 end_compfile:
