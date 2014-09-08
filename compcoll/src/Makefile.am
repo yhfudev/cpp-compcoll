@@ -92,7 +92,7 @@ compcoll_SOURCES= \
     compcoll.c \
     $(NULL)
 
-compcoll_LDADD = $(top_builddir)/src/libmylib.la
+compcoll_LDADD = #$(top_builddir)/src/libmylib.la
 
 compcoll_CPPFLAGS = $(AM_CPPFLAGS)
 compcoll_LDFLAGS = $(AM_LDFLAGS)

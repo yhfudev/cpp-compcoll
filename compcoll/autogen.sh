@@ -36,7 +36,7 @@ rm -f depcomp
     #sudo yum install -y libxml2-devel libxslt-devel libicu-devel
 #if
 
-if [ 1 = 1 ]; then
+if [ 0 = 1 ]; then
 autoscan
 else
 #cd pflib && ${DN_EXEC}autogen.sh && cd ..
