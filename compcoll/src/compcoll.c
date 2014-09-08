@@ -281,7 +281,6 @@ uni_to_utf8 (size_t val, uint8_t *buf, size_t szbuf)
 {
     size_t mask;
     int i;
-    uint8_t ch;
     uint8_t *p = buf;
     int ret = 0;
 
@@ -321,7 +320,7 @@ uni_to_utf8 (size_t val, uint8_t *buf, size_t szbuf)
         p ++;
         *p = ((val >> 6) & 0x3F) | 0x80;
         p ++;
-        ch = (val & 0x3F) | 0x80;
+        *p = (val & 0x3F) | 0x80;
         ret = 4;
     } else if (i < 27) {
         *p = (val >> 24) | 0xF8;
@@ -1070,6 +1069,7 @@ process (wcstrpair_t *wp, int right, off_t off, uint8_t *buf) //, size_t szbuf)
         p = pnext;
     }
     //strcmp_cb_addval_utf8fp (wp, right, '\n');
+    return 0;
 }
 
 int
@@ -1214,7 +1214,6 @@ compare_files (char * filename1, char *filename2)
 {
     FILE *fp1 = NULL;
     FILE *fp2 = NULL;
-    off_t pos;
     wcstrpair_t wpinfo;
 
     fp1 = fopen (filename1, "r");
