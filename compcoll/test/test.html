@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+
+
+<style>
+  a.redStrikeHover:hover {
+   color:red;
+   text-decoration:line-through;
+  }
+
+
+ins {
+    color:purple;
+}
+
+del,
+strike {
+    color:grey;
+    text-decoration: none;
+    line-height: 1.4;
+    background-image: -webkit-gradient(linear, left top, left bottom, from(transparent), color-stop(0.63em, transparent), color-stop(0.63em, #ff0000), color-stop(0.7em, #ff0000), color-stop(0.7em, transparent), to(transparent));
+    background-image: -webkit-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);
+    background-image: -o-linear-gradient(top, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);
+    background-image: linear-gradient(to bottom, transparent 0em, transparent 0.63em, #ff0000 0.63em, #ff0000 0.7em, transparent 0.7em, transparent 1.4em);
+    -webkit-background-size: 1.4em 1.4em;
+    background-size: 1.4em 1.4em;
+    background-repeat: repeat;
+}
+</style>
+
+<title></title>
+</head>
+<body>
+<ins>INS</ins> this <del>DEL</del>
+
+
+
+
+
+<p>
+<span style='color:red;text-decoration:line-through'>
+    text-decoration:line-through
+</span>
+</p>
+
+
+<p>
+<span style='color:red;text-decoration:line-through'>
+    <span style='color:black'>black with red strikethrough use span</span>
+</span>
+</p>
+
+
+<p>
+<strike style='color:red'>
+    <span style='color:black'>black with red strikethrough use strike<span>
+</strike>
+</p>
+
+
+
+
+
+<p>
+
+<a href='#' class='redStrikeHover'>
+<span style='color:black'>hover me</span>
+</a>
+</p>
+
+
+</body>
+</html>
