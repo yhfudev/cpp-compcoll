@@ -1,4 +1,4 @@
-#CC=g++
+CC=g++
 
 AM_LDFLAGS=
 AM_CPPFLAGS=
@@ -25,6 +25,7 @@ AM_LDFLAGS += \
 
 if USE_ICONV
 DEFS+= -DUSE_ICONV=1
+AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
 #AM_LDFLAGS += -liconv # iconv is a part of glib now, yum install glibc-common
 AM_CPPFLAGS += `pkg-config --cflags libchsetdet`
 AM_LDFLAGS += `pkg-config --libs libchsetdet`
@@ -32,6 +33,7 @@ AM_LDFLAGS += `pkg-config --libs libchsetdet`
 #AM_LDFLAGS += $(LIBCHSETDET_LDFLAGS)
 
 else
+AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
 #AM_CPPFLAGS += `pkg-config --cflags icu`
 #AM_LDFLAGS+= `pkg-config --libs icu`
 AM_CPPFLAGS += `pkg-config --cflags icu-i18n`
@@ -86,7 +88,7 @@ DEFS+=$(EXT_FLAGS)
 
 #noinst_PROGRAMS=lzssdran
 
-bin_PROGRAMS=compcoll
+bin_PROGRAMS=compcoll ucdet
 
 compcoll_SOURCES= \
     compcoll.c \
@@ -96,3 +98,20 @@ compcoll_LDADD = #$(top_builddir)/src/libmylib.la
 
 compcoll_CPPFLAGS = $(AM_CPPFLAGS)
 compcoll_LDFLAGS = $(AM_LDFLAGS)
+
+
+
+ucdet_SOURCES= \
+    i18n.c \
+    ucdet.c \
+    $(NULL)
+
+ucdet_LDADD = /usr/lib/x86_64-linux-gnu/libicui18n.a /usr/lib/x86_64-linux-gnu/libicuuc.a /usr/lib/x86_64-linux-gnu/libicudata.a -ldl
+#$(top_builddir)/src/libmylib.la
+
+ucdet_LDADD +=/usr/lib/libchsetdet.a
+
+
+ucdet_CPPFLAGS = $(AM_CPPFLAGS)
+ucdet_LDFLAGS = $(AM_LDFLAGS)
+

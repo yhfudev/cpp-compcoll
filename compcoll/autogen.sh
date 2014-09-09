@@ -64,7 +64,7 @@ fi
 
 #${DN_EXEC}configure --enable-static --enable-shared --enable-debug --without-icu4c
 #${DN_EXEC}configure --enable-static --enable-shared --enable-debug
-#./configure --enable-static --enable-shared --enable-debug --without-iconv
+./configure --enable-static --enable-shared --enable-debug --with-iconv
 #make clean
 #make
 

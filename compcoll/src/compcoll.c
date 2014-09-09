@@ -71,6 +71,9 @@ help (char *progname)
         , basename(progname));
     fprintf (stderr, "\nOptions:\n");
     //fprintf (stderr, "\t-p <port #>\tthe listen port\n");
+    fprintf (stderr, "\t-H\tshow the HTML header\n");
+    fprintf (stderr, "\t-T\tshow the HTML tail\n");
+    fprintf (stderr, "\t-C\tshow the HTML content only(no HTML header and tail)\n");
     fprintf (stderr, "\t-h\tPrint this message.\n");
     fprintf (stderr, "\t-v\tVerbose information.\n");
 }
@@ -389,16 +392,14 @@ typedef struct _strcmp_t {
 } strcmp_t;
 
 /**********************************************************************************/
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
 #define EDIS_NONE   0x00 /*!< No action */
 #define EDIS_INSERT 0x01 /*!< Insert action */
 #define EDIS_DELETE 0x02 /*!< Delete action */
 #define EDIS_REPLAC 0x03 /*!< Replace action */
 #define EDIS_IGNORE 0x04 /*!< Ignore action */
-
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-
-
 
 const char *
 edaction_val2cstr (char val)
@@ -422,8 +423,6 @@ edaction_val2cstr (char val)
     }
     return "?";
 }
-
-
 
 /**
  * @brief 计算两个字符串的距离
@@ -1167,15 +1166,24 @@ process (wcstrpair_t *wp, int right, off_t off, uint8_t *buf) //, size_t szbuf)
 int
 load_file (wcstrpair_t *wp, int right, FILE *fp)
 {
-    uint8_t buffer[10000];
+    char * buffer = NULL;
+    size_t szbuf = 0;
     off_t pos;
 
+    szbuf = 10000;
+    buffer = (char *) malloc (szbuf);
+    if (NULL == buffer) {
+        return -1;
+    }
     pos = ftell (fp);
-    while ( fgets ( (char *)buffer, sizeof buffer, fp ) != NULL ) {
-        process (wp, right, pos, buffer);
+    //ssize_t getline (char **lineptr, size_t *n, FILE *stream)
+    //while ( fgets ( (char *)buffer, sizeof buffer, fp ) != NULL ) {
+    while ( getline ( &buffer, &szbuf, fp ) > 0 ) {
+        process (wp, right, pos, (uint8_t *)buffer);
         pos = ftell (fp);
     }
 
+    free (buffer);
     return 0;
 }
 
@@ -1219,7 +1227,7 @@ void generate_compare_file(wcstrpair_t *wp)
     int x = 0; // index of string 1
     int y = 0; // index of string 2
     wchar_t val = 0;
-    for (i = 0; i < szpath; i ++) {
+    for (i = 0; (size_t)i < szpath; i ++) {
         val = 0;
         switch (path[i]) {
         case EDIS_NONE:
@@ -1299,6 +1307,8 @@ void generate_compare_file(wcstrpair_t *wp)
     "</body>" "\n" \
     "</html>"
 
+char flg_nohtmlhdr = 0;
+
 int
 compare_files (char * filename1, char *filename2)
 {
@@ -1324,14 +1334,18 @@ compare_files (char * filename1, char *filename2)
     load_file (&wpinfo, 0, fp1);
     load_file (&wpinfo, 1, fp2);
 
-    printf ("%s\n", HTML_OUT_HEADER);
+    if (! flg_nohtmlhdr) {
+        printf ("%s\n", HTML_OUT_HEADER);
+    }
     printf ("<h3>Compared files:</h3>\n");
     printf ("<table>");
     printf ("<tr><td>original file:</td><td><b>%s</b><td/></tr>\n", filename1);
     printf ("<tr><td>new file:</td>     <td><b>%s</b><td/></tr>\n", filename2);
     printf ("</table>\n");
     generate_compare_file(&wpinfo);
-    printf ("\n%s\n", HTML_OUT_TAIL);
+    if (! flg_nohtmlhdr) {
+        printf ("\n%s\n", HTML_OUT_TAIL);
+    }
 
     wcspair_clear (&wpinfo);
 
@@ -1348,14 +1362,29 @@ main (int argc, char * argv[])
     struct option longopts[]  = {
         //{ "port",         1, 0, 'p' },
         //{ "recursive",    0, 0, 'r' },
+        { "htmlheader",   0, 0, 'H' },
+        { "htmltail",     0, 0, 'T' },
+        { "htmlcontent",  0, 0, 'C' },
 
         { "help",         0, 0, 'h' },
         { "verbose",      0, 0, 'v' },
         { 0,              0, 0,  0  },
     };
 
-    while ((c = getopt_long( argc, argv, "vh", longopts, NULL )) != EOF) {
+    while ((c = getopt_long( argc, argv, "HTCvh", longopts, NULL )) != EOF) {
         switch (c) {
+        case 'H':
+            printf ("%s\n", HTML_OUT_HEADER);
+            exit (0);
+            break;
+        case 'T':
+            printf ("\n%s\n", HTML_OUT_TAIL);
+            exit (0);
+            break;
+        case 'C':
+            flg_nohtmlhdr = 1;
+            break;
+
         case 'v':
             break;
 
