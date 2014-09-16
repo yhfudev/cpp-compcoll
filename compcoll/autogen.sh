@@ -64,8 +64,8 @@ fi
 
 #${DN_EXEC}configure --enable-static --enable-shared --enable-debug --without-icu4c
 #${DN_EXEC}configure --enable-static --enable-shared --enable-debug
-./configure --enable-static --enable-shared --enable-debug --with-iconv
+PKG_CONFIG=$(which pkg-config) ./configure --enable-static --enable-shared --enable-debug --with-iconv
 #make clean
-#make
+make OPTS=-L/usr/lib
 
 fi

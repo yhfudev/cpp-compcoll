@@ -14,6 +14,7 @@ SED=sed
 # Checks for programs.
 AC_PROG_AWK
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
@@ -25,28 +26,17 @@ AC_PROG_MAKE_SET
 
 # Checks for libraries.
 
-AC_CHECK_LIB([bfd], [bfd_openr])
+#AC_CHECK_LIB([bfd], [bfd_openr])
 
 #AC_CHECK_LIB([z], [zlibVersion])
-PKG_CHECK_MODULES([ZLIB], [zlib])
+#PKG_CHECK_MODULES([ZLIB], [zlib])
 #AC_SUBST(ZLIB_CFLAGS)
-#AC_SUBST(ZLIB_LDFLAGS)
+#AC_SUBST(ZLIB_LIBS)
 
 #AC_CHECK_LIB([xml2], [main])
-PKG_CHECK_MODULES([LIBXML2], [libxml-2.0])
+#PKG_CHECK_MODULES([LIBXML2], [libxml-2.0])
 #AC_CHECK_LIB([xslt], [main])
-PKG_CHECK_MODULES([LIBXSLT], [libxslt])
-
-PKG_CHECK_EXISTS(icu,[
-        PKG_CHECK_MODULES([LIBICU0], [icu])
-    ], [
-        PKG_CHECK_MODULES([LIBICU1], [icu-i18n])
-    ])
-#AC_SUBST(LIBICU0_CFLAGS)
-#AC_SUBST(LIBICU0_LDFLAGS)
-#AC_SUBST(LIBICU1_CFLAGS)
-#AC_SUBST(LIBICU1_LDFLAGS)
-AM_CONDITIONAL(ICU_IS_LONG, [test x"$LIBICU0_CFLAGS" = x])
+#PKG_CHECK_MODULES([LIBXSLT], [libxslt])
 
 
 
@@ -105,7 +95,14 @@ AC_ARG_WITH([iconv],
 have_iconv=no
 # if no iconv, then icu ...
 if test x$with_iconv = xno; then
-    echo ""
+    PKG_CHECK_EXISTS(icu,[
+            PKG_CHECK_MODULES([LIBICU], [icu])
+        ], [
+            PKG_CHECK_MODULES([LIBICU], [icu-i18n])
+        ])
+    #AC_SUBST(LIBICU_CFLAGS)
+    #AC_SUBST(LIBICU_LIBS)
+
 else
     LIBICONV_INCLUDEDIR=""
     for d in \
@@ -123,10 +120,9 @@ else
         have_iconv=no
 
     else
-        echo "checking for ucnv_err.h...yes"
+        echo "checking for ucnv_err.h...yes [$LIBICONV_INCLUDEDIR]"
         have_iconv=yes
-        AM_CONDITIONAL([USE_ICONV], [test $have_iconv = "yes"])
-        # AC_DEFINE(USE_ICONV,1,[Defined when iconv can be used.])
+        AM_CONDITIONAL([USE_ICONV], [test $have_iconv = "yes"]) # AC_DEFINE(USE_ICONV,1,[Defined when iconv can be used.])
     fi
 fi
 
@@ -134,10 +130,10 @@ if test x$have_iconv = xno; then
     AM_CONDITIONAL([USE_ICONV], [test $have_iconv = "yes"])
     LIBICU_INCLUDEDIR=""
     for d in 			\
+        $prefix/include/unicode \
         /usr/include/unicode \
         /usr/include/x86_64-linux-gnu/unicode \
         /usr/include/i386-linux-gnu/unicode \
-        $prefix/include/unicode \
         /usr/include
     do
         if test -f "$d/ucnv_err.h" ; then
@@ -152,109 +148,113 @@ if test x$have_iconv = xno; then
         echo "checking for ucnv_err.h...yes"
         have_iconv=yes
     fi
-    #AC_DEFINE(HAVE_ICULIB,1,[Defined when libicu can be used.])
-    #AC_CHECK_LIB(icu, ucsdet_open, [],
-    #        [AC_MSG_ERROR([library 'icu' is required for ICU]), [ `icu-config --ldflags` ]])
+    dnl AC_DEFINE(HAVE_ICULIB,1,[Defined when libicu can be used.])
+    dnl AC_CHECK_LIB(icu, ucsdet_open, [],
+    dnl         [AC_MSG_ERROR([library 'icu' is required for ICU]), [ `icu-config --ldflags` ]])
 else
-#AC_CHECK_LIB([chsetdet], [ucsdet_open])
 PKG_CHECK_MODULES([LIBCHSETDET], [libchsetdet])
-#AC_SUBST(LIBCHSETDET_CFLAGS)
-#AC_SUBST(LIBCHSETDET_LDFLAGS)
+#AC_CHECK_LIB([chsetdet], [ucsdet_open])
+AC_SUBST(LIBCHSETDET_CFLAGS)
+AC_SUBST(LIBCHSETDET_LIBS)
+
 fi
 AM_CONDITIONAL([BUILD_WITH_ICULIB], [test "$have_iconv" = "yes"])
 
-# Check for needed wrappers 
-#   - if command line is not specified, then the path value is taken
-AC_ARG_WITH(xml2-config, AC_HELP_STRING([[--with-xml2-config=FILE]], [Path to xml2-config program]), 
-	    [ XML2="$withval" ], [ AC_PATH_PROG(XML2, xml2-config, [], [$PATH:/usr/sbin/]) ])
-AC_ARG_WITH(xslt-config, AC_HELP_STRING([[--with-xslt-config=FILE]], [Path to xslt-config program]), 
-	    [ XSLT="$withval" ], [ AC_PATH_PROG(XSLT, xslt-config, [], [$PATH:/usr/sbin/]) ])
-
-# Check if we found the wrapper 
-if test x$XML2 == x; then
-	AC_MSG_ERROR([Couldn't find 'xml2-config' in PATH. Please specify '--with-xml2-config' to configure.])
-fi
-if test x$XSLT == x; then
-	AC_MSG_ERROR([Couldn't find 'xslt-config' in PATH. Please specify '--with-xslt-config' to configure.])
-fi
-
-# What a shame !@!! gcc-2.95 does not 
-# like spaces between -l and the name of the library!
-AC_CHECK_LIB([xml2], [xmlParseMemory], [ XML2F='yes' ], AC_MSG_ERROR([Couldn't find libxml2 ]), [ `$XML2 --libs` ])
-AC_CHECK_LIB([xslt], [xsltApplyStylesheet], [ XSLTF='yes' ], AC_MSG_ERROR([Couldn't find libxslt ]), [ `$XSLT --libs` ])
-
-if test "$XML2F" = "yes"; then
-  CPPFLAGS="`$XML2 --cflags` $CPPFLAGS";
-
-    # Check for libxml2 headers
-  AC_CHECK_HEADERS([libxml/uri.h libxml/tree.h libxml/parserInternals.h],,
-    		  AC_MSG_ERROR([Some or all required header files for libxml2 are missing. ]))
-
-    # Check if we have threading enabled 
-  AC_CHECK_LIB([xml2], [xmlGetGlobalState], [ 
-          LIBS="$LIBS"  
-	  AC_DEFINE(HAVE_LIBXML_THREADS,, [A version of libxml2 with multithreading support is being used])
-	], [ 
-	if test "$INTERACTIVE" = "yes"; then
-  	  AC_MSG_WARN([ ] 
-[******************************************************]
-[* Your libxml2 is not compiled with multithreading support. ]
-[* Please make sure to read the `README` _carefully_.]
-[* Compilation will go on anyway - but don't expect me to]
-[* believe your bug reports. Hit a key to continue.]
-[******************************************************]);
-	  read
-	else
-  	  AC_MSG_WARN([ ] 
-[******************************************************]
-[* Your libxml2 is not compiled with multithreading support. ]
-[* Please make sure to read the `README` _carefully_.]
-[* Compilation will go on anyway - but don't expect me to]
-[* believe your bug reports. ] 
-[******************************************************]);
-	fi], [ `$XML2 --libs` ])
-
-    # Check if libxml2 patch has been applyed
-  AC_CHECK_LIB([xml2], [xmlSetGlobalState], [ 
-          LIBS="$LIBS" 
-          AC_DEFINE(HAVE_LIBXML_HACK,, [A version of libxml2 that does support setGlobalState is being used])
-	], [
-  	  AC_MSG_WARN([ ] 
-[******************************************************]
-[* Your libxml2 does not provide a setGlobalState. ]
-[* You probably haven't patched it. Please read the `README`.]
-[* Compilation will go on anyway - I've installed some compatibility handlers.]
-[******************************************************])
-	 ], [ `$XML2 --libs` ])
-
-  # LIBS="$LIBS `$XML2 --libs`"
-fi
-
-  # Add libxslt parameters
-if test "$XSLTF" = "yes"; then
-  CPPFLAGS="$CPPFLAGS `$XSLT --cflags`"
-
-    # Check for libxslt headers
-  AC_CHECK_HEADERS([libxslt/xslt.h libxslt/xsltInternals.h libxslt/transform.h libxslt/xsltutils.h],,
-  		  [ AC_MSG_ERROR([Some or all header files for libxslt are missing ]) ])
-
-  LIBS="$LIBS `$XSLT --libs`"
-
-    # Check if exslt was asked
-  AC_ARG_ENABLE([exslt], AC_HELP_STRING([[--enable-exslt]], [Enable exslt extensions for libxslt. Default disabled ]),
-	    [ EXSLT="yes" ], [ EXSLT="no" ])
 
 
-  if test "$EXSLT" = "yes"; then
-    AC_CHECK_HEADERS([libexslt/exslt.h],, [ AC_MSG_ERROR([Could not find headers for exslt library ]) ])
-    AC_CHECK_LIB([exslt], [exsltLibraryVersion], [ LIBS="$LIBS" ], [ AC_MSG_ERROR([Could not link against libexslt ]) ])
 
-    AC_DEFINE(USE_EXSLT,,[libexslt is installed on the system and you want mod-yaslt to use it])
+#dnl Check for needed wrappers 
+#dnl    - if command line is not specified, then the path value is taken
+#AC_ARG_WITH(xml2-config, AC_HELP_STRING([[--with-xml2-config=FILE]], [Path to xml2-config program]), 
+	    #[ XML2="$withval" ], [ AC_PATH_PROG(XML2, xml2-config, [], [$PATH:/usr/sbin/]) ])
+#AC_ARG_WITH(xslt-config, AC_HELP_STRING([[--with-xslt-config=FILE]], [Path to xslt-config program]), 
+	    #[ XSLT="$withval" ], [ AC_PATH_PROG(XSLT, xslt-config, [], [$PATH:/usr/sbin/]) ])
 
-    #CPPFLAGS="$CPPFLAGS"
-    LIBS="$LIBS -lexslt"
-  fi
-fi
+#dnl # Check if we found the wrapper 
+#if test x$XML2 == x; then
+	#AC_MSG_ERROR([Couldn't find 'xml2-config' in PATH. Please specify '--with-xml2-config' to configure.])
+#fi
+#if test x$XSLT == x; then
+	#AC_MSG_ERROR([Couldn't find 'xslt-config' in PATH. Please specify '--with-xslt-config' to configure.])
+#fi
+
+#dnl # What a shame !@!! gcc-2.95 does not 
+#dnl # like spaces between -l and the name of the library!
+#AC_CHECK_LIB([xml2], [xmlParseMemory], [ XML2F='yes' ], AC_MSG_ERROR([Couldn't find libxml2 ]), [ `$XML2 --libs` ])
+#AC_CHECK_LIB([xslt], [xsltApplyStylesheet], [ XSLTF='yes' ], AC_MSG_ERROR([Couldn't find libxslt ]), [ `$XSLT --libs` ])
+
+#if test "$XML2F" = "yes"; then
+  #CPPFLAGS="`$XML2 --cflags` $CPPFLAGS";
+
+  #dnl # Check for libxml2 headers
+  #AC_CHECK_HEADERS([libxml/uri.h libxml/tree.h libxml/parserInternals.h],,
+    		  #AC_MSG_ERROR([Some or all required header files for libxml2 are missing. ]))
+
+  #dnl # Check if we have threading enabled 
+  #AC_CHECK_LIB([xml2], [xmlGetGlobalState], [ 
+          #LIBS="$LIBS"  
+	  #AC_DEFINE(HAVE_LIBXML_THREADS,, [A version of libxml2 with multithreading support is being used])
+	#], [ 
+	#if test "$INTERACTIVE" = "yes"; then
+  	  #AC_MSG_WARN([ ] 
+#[******************************************************]
+#[* Your libxml2 is not compiled with multithreading support. ]
+#[* Please make sure to read the `README` _carefully_.]
+#[* Compilation will go on anyway - but don't expect me to]
+#[* believe your bug reports. Hit a key to continue.]
+#[******************************************************]);
+	  #read
+	#else
+  	  #AC_MSG_WARN([ ] 
+#[******************************************************]
+#[* Your libxml2 is not compiled with multithreading support. ]
+#[* Please make sure to read the `README` _carefully_.]
+#[* Compilation will go on anyway - but don't expect me to]
+#[* believe your bug reports. ] 
+#[******************************************************]);
+	#fi], [ `$XML2 --libs` ])
+
+  #dnl # Check if libxml2 patch has been applyed
+  #AC_CHECK_LIB([xml2], [xmlSetGlobalState], [ 
+          #LIBS="$LIBS" 
+          #AC_DEFINE(HAVE_LIBXML_HACK,, [A version of libxml2 that does support setGlobalState is being used])
+	#], [
+  	  #AC_MSG_WARN([ ] 
+#[******************************************************]
+#[* Your libxml2 does not provide a setGlobalState. ]
+#[* You probably haven't patched it. Please read the `README`.]
+#[* Compilation will go on anyway - I've installed some compatibility handlers.]
+#[******************************************************])
+	 #], [ `$XML2 --libs` ])
+
+  #dnl # LIBS="$LIBS `$XML2 --libs`"
+#fi
+
+#dnl # Add libxslt parameters
+#if test "$XSLTF" = "yes"; then
+  #CPPFLAGS="$CPPFLAGS `$XSLT --cflags`"
+
+  #dnl # Check for libxslt headers
+  #AC_CHECK_HEADERS([libxslt/xslt.h libxslt/xsltInternals.h libxslt/transform.h libxslt/xsltutils.h],,
+  		  #[ AC_MSG_ERROR([Some or all header files for libxslt are missing ]) ])
+
+  #LIBS="$LIBS `$XSLT --libs`"
+
+  #dnl # Check if exslt was asked
+  #AC_ARG_ENABLE([exslt], AC_HELP_STRING([[--enable-exslt]], [Enable exslt extensions for libxslt. Default disabled ]),
+	    #[ EXSLT="yes" ], [ EXSLT="no" ])
+
+
+  #if test "$EXSLT" = "yes"; then
+    #AC_CHECK_HEADERS([libexslt/exslt.h],, [ AC_MSG_ERROR([Could not find headers for exslt library ]) ])
+    #AC_CHECK_LIB([exslt], [exsltLibraryVersion], [ LIBS="$LIBS" ], [ AC_MSG_ERROR([Could not link against libexslt ]) ])
+
+    #AC_DEFINE(USE_EXSLT,,[libexslt is installed on the system and you want mod-yaslt to use it])
+
+    #dnl #CPPFLAGS="$CPPFLAGS"
+    #LIBS="$LIBS -lexslt"
+  #fi
+#fi
 
 
 
@@ -270,7 +270,7 @@ AC_TYPE_UINT8_T
 # Checks for library functions.
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
-AC_CHECK_FUNCS([memmove memset])
+AC_CHECK_FUNCS([memmove memset getline])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])

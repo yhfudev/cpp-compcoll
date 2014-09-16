@@ -16,8 +16,8 @@
 #include <string.h>
 #include <getopt.h>
 
+#include "getline.h"
 #include "i18n.h"
-
 
 /**********************************************************************************/
 #if 0

@@ -5,7 +5,7 @@
  * @version 1.0
  * @date    2014-09-07
  */
-
+#define _GNU_SOURCE 1
 #include <stdint.h>    /* uint8_t */
 #include <stdlib.h>    /* size_t */
 #include <unistd.h> // write()
@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <getopt.h>
-
 
 #include <inttypes.h> /* for PRIdPTR PRIiPTR PRIoPTR PRIuPTR PRIxPTR PRIXPTR, SCNdPTR SCNiPTR SCNoPTR SCNuPTR SCNxPTR */
 #ifdef __WIN32__                /* or whatever */
@@ -29,6 +28,8 @@
 #endif
 #define PRIiOFF PRIx64 /*"lld"*/
 #define PRIuOFF PRIx64 /*"llu"*/
+
+#include "getline.h"
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -920,6 +921,11 @@ mymat_set (void *userdata, size_t row, size_t col, int val)
 {
     mymatrix_t *pm = (mymatrix_t *) userdata;
     assert (NULL != pm);
+#if 1 // DEBUG
+	if (row * pm->szcol + col >= pm->szbuf) {
+		fprintf (stderr, "Error: row=%d,col=%d,szcol=%d,szbuf=%d\n", (int)row,(int)col,(int)pm->szcol,(int)pm->szbuf);
+	}
+#endif
     assert (row * pm->szcol + col < pm->szbuf);
     assert (NULL != pm->buf);
     pm->buf[row * pm->szcol + col] = val;

@@ -1,7 +1,53 @@
-CC=g++
+#CC=g++
 
-AM_LDFLAGS=
-AM_CPPFLAGS=
+#noinst_PROGRAMS=lzssdran
+
+bin_PROGRAMS=compcoll ucdet htmlescape
+
+compcoll_SOURCES= \
+    getline.c \
+    compcoll.c \
+    $(NULL)
+
+#compcoll_CPPFLAGS = $(AM_CPPFLAGS)
+#compcoll_LDFLAGS = $(AM_LDFLAGS)
+#compcoll_LDADD = #$(top_builddir)/src/libmylib.la
+
+htmlescape_SOURCES= \
+    getline.c \
+    octstring.c \
+    escape.c \
+    $(NULL)
+
+ucdet_SOURCES= \
+    dummy.cpp \
+    getline.c \
+    i18n.c \
+    ucdet.c \
+    $(NULL)
+
+# force the autoconf use g++ to link the c program with c++ lib
+dummy.cpp:
+	touch $@
+
+ucdet_LDADD=
+
+# add the required lib to the end of link command line
+ucdet_LDADD+=$(LIBCHSETDET_CFLAGS) $(LIBCHSETDET_LIBS)
+
+#ucdet_LDADD += /usr/lib/x86_64-linux-gnu/libicui18n.a /usr/lib/x86_64-linux-gnu/libicuuc.a /usr/lib/x86_64-linux-gnu/libicudata.a -ldl
+#ucdet_LDADD +=/usr/lib/libchsetdet.a
+
+#ucdet_CPPFLAGS = $(LIBCHSETDET_CFLAGS) $(AM_CPPFLAGS)
+#ucdet_LDFLAGS = $(LIBCHSETDET_LIBS) $(AM_LDFLAGS)
+
+
+
+
+
+
+AM_LDFLAGS=$(OPTS)
+AM_CPPFLAGS=$(OPTS)
 
 DEFS+= \
     `getconf LFS_CFLAGS` \
@@ -25,32 +71,27 @@ AM_LDFLAGS += \
 
 if USE_ICONV
 DEFS+= -DUSE_ICONV=1
-AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
+#AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
 #AM_LDFLAGS += -liconv # iconv is a part of glib now, yum install glibc-common
-AM_CPPFLAGS += `pkg-config --cflags libchsetdet`
-AM_LDFLAGS += `pkg-config --libs libchsetdet`
-#AM_CPPFLAGS += $(LIBCHSETDET_CFLAGS)
-#AM_LDFLAGS += $(LIBCHSETDET_LDFLAGS)
+#AM_CPPFLAGS += `pkg-config --cflags libchsetdet`
+#AM_LDFLAGS += `pkg-config --libs libchsetdet`
+AM_CPPFLAGS += $(LIBCHSETDET_CFLAGS)
+AM_LDFLAGS += $(LIBCHSETDET_LIBS)
 
 else
-AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
+#AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
 #AM_CPPFLAGS += `pkg-config --cflags icu`
 #AM_LDFLAGS+= `pkg-config --libs icu`
 AM_CPPFLAGS += `pkg-config --cflags icu-i18n`
 AM_LDFLAGS+= `pkg-config --libs icu-i18n`
-#if ICU_IS_LONG
-#libseederdict_la_CPPFLAGS += $(LIBICU1_CFLAGS)
-#libseederdict_la_LDFLAGS+= $(LIBICU1_LDFLAGS)
-#else
-#libseederdict_la_CPPFLAGS += $(LIBICU0_CFLAGS)
-#libseederdict_la_LDFLAGS+= $(LIBICU0_LDFLAGS)
-#endif
+#libseederdict_la_CPPFLAGS += $(LIBICU_CFLAGS)
+#libseederdict_la_LDFLAGS+= $(LIBICU_LIBS)
 endif
 
 #AM_CPPFLAGS += `pkg-config --cflags zlib`
 #AM_LDFLAGS += `pkg-config --libs zlib`
 #AM_CPPFLAGS += $(ZLIB_CFLAGS)
-#AM_LDFLAGS += $(ZLIB_LDFLAGS)
+#AM_LDFLAGS += $(ZLIB_LIBS)
 
 #AM_LDFLAGS += -pthread
 
@@ -84,34 +125,3 @@ EXT_FLAGS+= -DSVN_VERSION='"${GITNUMTMP}"'
 DEFS+=$(EXT_FLAGS)
 
 #AM_CPPFLAGS+=$(EXT_FLAGS)
-
-
-#noinst_PROGRAMS=lzssdran
-
-bin_PROGRAMS=compcoll ucdet
-
-compcoll_SOURCES= \
-    compcoll.c \
-    $(NULL)
-
-compcoll_LDADD = #$(top_builddir)/src/libmylib.la
-
-compcoll_CPPFLAGS = $(AM_CPPFLAGS)
-compcoll_LDFLAGS = $(AM_LDFLAGS)
-
-
-
-ucdet_SOURCES= \
-    i18n.c \
-    ucdet.c \
-    $(NULL)
-
-ucdet_LDADD = /usr/lib/x86_64-linux-gnu/libicui18n.a /usr/lib/x86_64-linux-gnu/libicuuc.a /usr/lib/x86_64-linux-gnu/libicudata.a -ldl
-#$(top_builddir)/src/libmylib.la
-
-ucdet_LDADD +=/usr/lib/libchsetdet.a
-
-
-ucdet_CPPFLAGS = $(AM_CPPFLAGS)
-ucdet_LDFLAGS = $(AM_LDFLAGS)
-
