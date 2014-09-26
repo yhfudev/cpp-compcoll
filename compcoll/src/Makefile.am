@@ -36,7 +36,7 @@ ucdet_LDADD=
 ucdet_LDADD+=$(LIBCHSETDET_CFLAGS) $(LIBCHSETDET_LIBS)
 
 #ucdet_LDADD += /usr/lib/x86_64-linux-gnu/libicui18n.a /usr/lib/x86_64-linux-gnu/libicuuc.a /usr/lib/x86_64-linux-gnu/libicudata.a -ldl
-#ucdet_LDADD +=/usr/lib/libchsetdet.a
+ucdet_LDADD +=/usr/lib/libchsetdet.a
 
 #ucdet_CPPFLAGS = $(LIBCHSETDET_CFLAGS) $(AM_CPPFLAGS)
 #ucdet_LDFLAGS = $(LIBCHSETDET_LIBS) $(AM_LDFLAGS)

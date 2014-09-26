@@ -5,6 +5,7 @@
  * @version 1.0
  * @date    2014-09-07
  */
+
 #define _GNU_SOURCE 1
 #include <stdint.h>    /* uint8_t */
 #include <stdlib.h>    /* size_t */
@@ -54,7 +55,7 @@
 
 #define VER_MAJOR 0
 #define VER_MINOR 1
-#define VER_MOD   1
+#define VER_MOD   2
 
 static void
 version (void)
@@ -75,6 +76,9 @@ help (char *progname)
     fprintf (stderr, "\t-H\tshow the HTML header\n");
     fprintf (stderr, "\t-T\tshow the HTML tail\n");
     fprintf (stderr, "\t-C\tshow the HTML content only(no HTML header and tail)\n");
+    fprintf (stderr, "\t-m\tmerge the same changes\n");
+    fprintf (stderr, "\t-r\toutput <return>, all|old|new\n");
+    fprintf (stderr, "\t-x\tset the sequence # of the title\n");
     fprintf (stderr, "\t-h\tPrint this message.\n");
     fprintf (stderr, "\t-v\tVerbose information.\n");
 }
@@ -1028,17 +1032,41 @@ void test1()
 
 
 /**********************************************************************************/
+
+// how to output the <return> char?
+#define OUT_RET_OLD 0x01 /* output the <return> according the old file */
+#define OUT_RET_NEW 0x02 /* output the <return> according the new file */
+
 typedef struct _wcstrpair_t {
-    wchar_t * str[2]; /* the file contents are transfered to a wchar_t buffer (some contents were filtered out according to user commanded) */
+    wchar_t * str[2];   /* the file contents are transfered to a wchar_t buffer (some contents were filtered out according to user commanded) */
     size_t szstr[2];    /* the max number of the items of str[] */
-    size_t len[2];    /* the number of the char in the str[] */
-    size_t * pos[2];   /* the start position of the real data */
+    size_t len[2];      /* the number of the char in the str[] */
+    size_t * pos[2];    /* the start position of the real data */
+    FILE * tmpfp[2];    /* the temp file for merge same changes */
+    char flg_outret;    /* how to output the <return> char? OUT_RET_(OLD|NEW) */
 } wcstrpair_t;
 
+// flg_merge: 1  - merge the same <del>/<ins>
 int
-wcspair_init (wcstrpair_t *wp)
+wcspair_init (wcstrpair_t *wp, char flg_merge)
 {
     memset (wp, 0, sizeof(*wp));
+    wp->flg_outret = OUT_RET_NEW;
+    if (flg_merge) {
+        wp->tmpfp[0] = tmpfile64();
+        wp->tmpfp[1] = tmpfile64();
+        if ((NULL == wp->tmpfp[0]) || (NULL == wp->tmpfp[1])) {
+            perror ("tmpfile64");
+            if (NULL != wp->tmpfp[0]) {
+                fclose (wp->tmpfp[0]);
+                wp->tmpfp[0] = NULL;
+            }
+            if (NULL != wp->tmpfp[1]) {
+                fclose (wp->tmpfp[1]);
+                wp->tmpfp[1] = NULL;
+            }
+        }
+    }
     return 0;
 }
 
@@ -1056,6 +1084,14 @@ wcspair_clear (wcstrpair_t *wp)
     }
     if (NULL != wp->pos[1]) {
         free (wp->str[1]);
+    }
+    if (NULL != wp->tmpfp[0]) {
+        fclose (wp->tmpfp[0]);
+        wp->tmpfp[0] = NULL;
+    }
+    if (NULL != wp->tmpfp[1]) {
+        fclose (wp->tmpfp[1]);
+        wp->tmpfp[1] = NULL;
     }
     return 0;
 }
@@ -1193,7 +1229,123 @@ load_file (wcstrpair_t *wp, int right, FILE *fp)
     return 0;
 }
 
-void generate_compare_file(wcstrpair_t *wp)
+#if _WIN32
+//#define ftruncate(a,b,c) _chsize((a),(b),(c))
+#endif
+
+off_t
+fp_size (FILE *fp)
+{
+    off_t pos = ftell(fp);
+    off_t sz = 0;
+    fseek(fp, 0L, SEEK_END);
+    sz = ftell(fp);
+    fseek(fp, pos, SEEK_SET);
+    return sz;
+}
+
+#define TMPFPIDX_DEL 0
+#define TMPFPIDX_INS 1
+
+// output the strings in the buffer
+void
+wpair_output_flush (wcstrpair_t *wp)
+{
+    char flg_err = 0;
+    char a;
+    if (NULL == wp->tmpfp[0]) {
+        return;
+    }
+    // copy file content
+    if (fp_size (wp->tmpfp[TMPFPIDX_DEL]) > 0) {
+        fprintf (stdout, "<del>");
+        fseek(wp->tmpfp[TMPFPIDX_DEL], 0, SEEK_SET);
+        while ((a = fgetc(wp->tmpfp[TMPFPIDX_DEL])) != EOF) {
+            if (0 == a) continue;
+            fputc (a, stdout);
+        }
+        fprintf (stdout, "</del>");
+    }
+    if (fp_size (wp->tmpfp[TMPFPIDX_INS]) > 0) {
+        fprintf (stdout, "<ins>");
+        fseek(wp->tmpfp[TMPFPIDX_INS], 0, SEEK_SET);
+        while ((a = fgetc(wp->tmpfp[TMPFPIDX_INS])) != EOF) {
+            if (0 == a) continue;
+            fputc (a, stdout);
+        }
+        fprintf (stdout, "</ins>");
+    }
+
+    // truncate file
+    if (ftruncate(fileno(wp->tmpfp[0]), 0) != 0) {
+        perror ("truncate file0");
+        flg_err = 1;
+    }
+    if (ftruncate(fileno(wp->tmpfp[1]), 0) != 0) {
+        perror ("truncate file1");
+        flg_err = 1;
+    }
+    if (flg_err) {
+        fclose (wp->tmpfp[0]);
+        fclose (wp->tmpfp[1]);
+        wp->tmpfp[0] = NULL;
+        wp->tmpfp[1] = NULL;
+    }
+}
+
+// delete a char
+void
+wpair_output_del (wcstrpair_t *wp, strcmp_t *sp, int right, size_t idx)
+{
+    assert (NULL != wp);
+    assert (NULL != sp);
+    if (NULL == wp->tmpfp[0]) {
+        fprintf (stdout, "<del>");
+        sp->cb_output (sp->userdata_str, stdout, right, idx);
+        fprintf (stdout, "</del>");
+        return;
+    }
+    sp->cb_output (sp->userdata_str, wp->tmpfp[TMPFPIDX_DEL], right, idx);
+}
+
+// insert a new char
+void
+wpair_output_ins (wcstrpair_t *wp, strcmp_t *sp, int right, size_t idx)
+{
+    assert (NULL != wp);
+    assert (NULL != sp);
+    if (NULL == wp->tmpfp[0]) {
+        fprintf (stdout, "<ins>");
+        sp->cb_output (sp->userdata_str, stdout, right, idx);
+        fprintf (stdout, "</ins>");
+        return;
+    }
+    sp->cb_output (sp->userdata_str, wp->tmpfp[TMPFPIDX_INS], right, idx);
+}
+
+// the normal char
+void
+wpair_output_nor (wcstrpair_t *wp, strcmp_t *sp, int right, size_t idx)
+{
+    assert (NULL != wp);
+    assert (NULL != sp);
+
+    wpair_output_flush (wp);
+    sp->cb_output (sp->userdata_str, stdout, right, idx);
+}
+
+// output a return
+void
+wpair_output_ret (wcstrpair_t *wp)
+{
+    assert (NULL != wp);
+
+    wpair_output_flush (wp);
+    fprintf (stdout, "<br />");
+}
+
+void
+generate_compare_file(wcstrpair_t *wp)
 {
     int i;
     int ret;
@@ -1230,6 +1382,9 @@ void generate_compare_file(wcstrpair_t *wp)
     ret = ed_edit_distance_path (&cmpinfo, path, &szpath);
     fprintf (stderr, "different sites = %d\n", ret);
 
+    mymat_clear (&mat1);
+    mymat_clear (&mat2);
+
     int x = 0; // index of string 1
     int y = 0; // index of string 2
     wchar_t val = 0;
@@ -1240,44 +1395,46 @@ void generate_compare_file(wcstrpair_t *wp)
             //printf ("0");
             break;
         case EDIS_INSERT:
-            val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
-            printf ("<ins>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 1, y);
-            printf ("</ins>");
+            if (wp->flg_outret | OUT_RET_NEW) {
+                val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
+            }
+            wpair_output_ins (wp, &cmpinfo, 1, y);
             y ++;
             break;
         case EDIS_DELETE:
-            val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
-            printf ("<del>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
-            printf ("</del>");
+            if (wp->flg_outret | OUT_RET_OLD) {
+                val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
+            }
+            wpair_output_del (wp, &cmpinfo, 0, x);
             x ++;
             break;
         case EDIS_REPLAC:
-            val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
-            printf ("<del>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
-            printf ("</del>");
+            if (wp->flg_outret | OUT_RET_NEW) {
+                val = cmpinfo.cb_getval (cmpinfo.userdata_str, 1, y);
+            }
+            if (wp->flg_outret | OUT_RET_OLD) {
+                if ('\n' != val) {
+                    val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
+                }
+            }
+            wpair_output_del (wp, &cmpinfo, 0, x);
             x ++;
-            printf ("<ins>");
-            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 1, y);
-            printf ("</ins>");
+            wpair_output_ins (wp, &cmpinfo, 1, y);
             y ++;
             break;
         case EDIS_IGNORE:
             val = cmpinfo.cb_getval (cmpinfo.userdata_str, 0, x);
-            cmpinfo.cb_output (cmpinfo.userdata_str, stdout, 0, x);
+            wpair_output_nor (wp, &cmpinfo, 0, x);
             x ++;
             y ++;
             break;
         }
         if ('\n' == val) {
-            printf ("<br />");
+            //fprintf (stdout, "<br />");
+            wpair_output_ret (wp);
         }
     }
 
-    mymat_clear (&mat1);
-    mymat_clear (&mat2);
     free (path);
 }
 
@@ -1288,11 +1445,11 @@ void generate_compare_file(wcstrpair_t *wp)
     "<meta charset='utf-8' />" "\n" \
     "<style>" "\n" \
     "  ins {" "\n" \
-    "    color:purple;" "\n" \
+    "    color:blue; font-weight: normal;" "\n" \
     "  }" "\n" \
     "  del," "\n" \
     "  strike {" "\n" \
-    "    color:grey;" "\n" \
+    "    color:purple;" "\n" \
     "    text-decoration: none;" "\n" \
     "    line-height: 1.4;" "\n" \
     "    background-image: -webkit-gradient(linear, left top, left bottom, from(transparent), color-stop(0.63em, transparent), color-stop(0.63em, #ff0000), color-stop(0.7em, #ff0000), color-stop(0.7em, transparent), to(transparent));" "\n" \
@@ -1304,6 +1461,7 @@ void generate_compare_file(wcstrpair_t *wp)
     "    background-repeat: repeat;" "\n" \
     "  }" "\n" \
     "</style>" "\n" \
+    "<link href='compcollouter.css' rel='stylesheet' type='text/css'>" "\n" \
     "<title>compcoll Generated compare text</title>" "\n" \
     "</head>" "\n" \
     "<body>"
@@ -1315,8 +1473,10 @@ void generate_compare_file(wcstrpair_t *wp)
 
 char flg_nohtmlhdr = 0;
 
+
+// flg_merge: 1  - merge the same <del>/<ins>
 int
-compare_files (char * filename1, char *filename2)
+compare_files (ssize_t idx, char * filename1, char *filename2, char flg_merge, char flg_outret)
 {
     FILE *fp1 = NULL;
     FILE *fp2 = NULL;
@@ -1336,14 +1496,19 @@ compare_files (char * filename1, char *filename2)
         goto end_compfile;
     }
 
-    wcspair_init (&wpinfo);
+    wcspair_init (&wpinfo, flg_merge);
+    wpinfo.flg_outret = flg_outret;
     load_file (&wpinfo, 0, fp1);
     load_file (&wpinfo, 1, fp2);
 
     if (! flg_nohtmlhdr) {
         printf ("%s\n", HTML_OUT_HEADER);
     }
-    printf ("<h3>Compared files:</h3>\n");
+    if (idx >= 0) {
+        printf ("<h3>[%zd] Compared files:</h3>\n", idx);
+    } else {
+        printf ("<h3>Compared files:</h3>\n");
+    }
     printf ("<table>");
     printf ("<tr><td>original file:</td><td><b>%s</b><td/></tr>\n", filename1);
     printf ("<tr><td>new file:</td>     <td><b>%s</b><td/></tr>\n", filename2);
@@ -1364,20 +1529,24 @@ end_compfile:
 int
 main (int argc, char * argv[])
 {
+    char flg_merge = 0;
+    char flg_outret = OUT_RET_NEW;
+    ssize_t idx = -1;
     int c;
     struct option longopts[]  = {
-        //{ "port",         1, 0, 'p' },
-        //{ "recursive",    0, 0, 'r' },
         { "htmlheader",   0, 0, 'H' },
         { "htmltail",     0, 0, 'T' },
         { "htmlcontent",  0, 0, 'C' },
+        { "mergechanges", 0, 0, 'm' },
+        { "outreturn",    1, 0, 'r' },
+        { "indexnum",     1, 0, 'x' },
 
         { "help",         0, 0, 'h' },
         { "verbose",      0, 0, 'v' },
         { 0,              0, 0,  0  },
     };
 
-    while ((c = getopt_long( argc, argv, "HTCvh", longopts, NULL )) != EOF) {
+    while ((c = getopt_long( argc, argv, "mr:x:HTCvh", longopts, NULL )) != EOF) {
         switch (c) {
         case 'H':
             printf ("%s\n", HTML_OUT_HEADER);
@@ -1390,6 +1559,21 @@ main (int argc, char * argv[])
         case 'C':
             flg_nohtmlhdr = 1;
             break;
+        case 'r':
+            if (0 == strcmp(optarg, "both")) {
+                flg_outret = OUT_RET_NEW | OUT_RET_OLD;
+            } else if (0 == strcmp(optarg, "old")) {
+                flg_outret = OUT_RET_OLD;
+            } else if (0 == strcmp(optarg, "new")) {
+                flg_outret = OUT_RET_NEW;
+            }
+            break;
+        case 'm':
+            flg_merge = 1;
+            break;
+        case 'x':
+            idx = atoi(optarg);
+            break;
 
         case 'v':
             break;
@@ -1399,7 +1583,7 @@ main (int argc, char * argv[])
             exit (0);
             break;
         default:
-            fprintf (stderr, "Unknown parameter: '%c'.\n", c);
+            fprintf (stderr, "%s: Unknown parameter: '%c'.\n", argv[0], c);
             fprintf (stderr, "Use '%s -h' for more information.\n", basename(argv[0]));
             exit (-1);
             break;
@@ -1410,6 +1594,6 @@ main (int argc, char * argv[])
 
     c = optind;
     //for (; c < (size_t)argc; c ++) {
-    compare_files (argv[c], argv[c + 1]);
+    compare_files (idx, argv[c], argv[c + 1], flg_merge, flg_outret);
     return 0;
 }
