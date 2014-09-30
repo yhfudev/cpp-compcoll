@@ -51,6 +51,11 @@
 #define USE_OUT_ED_TABLE 0
 
 
+#if _WIN32
+#define tmpfile64() tmpfile()
+//#define ftruncate(a,b,c) _chsize((a),(b),(c))
+#endif
+
 /**********************************************************************************/
 
 #define VER_MAJOR 0
@@ -69,7 +74,7 @@ static void
 help (char *progname)
 {
     fprintf (stderr, "Usage: \n"
-        "\t%s <old file> <new file>\n"
+        "\t%s [options] <old file> <new file>\n"
         , basename(progname));
     fprintf (stderr, "\nOptions:\n");
     //fprintf (stderr, "\t-p <port #>\tthe listen port\n");
@@ -1229,10 +1234,6 @@ load_file (wcstrpair_t *wp, int right, FILE *fp)
     return 0;
 }
 
-#if _WIN32
-//#define ftruncate(a,b,c) _chsize((a),(b),(c))
-#endif
-
 off_t
 fp_size (FILE *fp)
 {
@@ -1560,7 +1561,7 @@ main (int argc, char * argv[])
             flg_nohtmlhdr = 1;
             break;
         case 'r':
-            if (0 == strcmp(optarg, "both")) {
+            if (0 == strcmp(optarg, "all")) {
                 flg_outret = OUT_RET_NEW | OUT_RET_OLD;
             } else if (0 == strcmp(optarg, "old")) {
                 flg_outret = OUT_RET_OLD;
