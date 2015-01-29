@@ -1,4 +1,6 @@
-#CC=g++
+
+AM_CPPFLAGS=
+AM_LDFLAGS=
 
 #noinst_PROGRAMS=lzssdran
 
@@ -36,7 +38,9 @@ ucdet_LDADD=
 ucdet_LDADD+=$(LIBCHSETDET_CFLAGS) $(LIBCHSETDET_LIBS)
 
 #ucdet_LDADD += /usr/lib/x86_64-linux-gnu/libicui18n.a /usr/lib/x86_64-linux-gnu/libicuuc.a /usr/lib/x86_64-linux-gnu/libicudata.a -ldl
-ucdet_LDADD +=/usr/lib/libchsetdet.a
+#ucdet_LDADD +=/usr/lib/libucd.a
+AM_CPPFLAGS += `pkg-config --cflags libucd`
+AM_LDFLAGS += `pkg-config --libs libucd`
 
 #ucdet_CPPFLAGS = $(LIBCHSETDET_CFLAGS) $(AM_CPPFLAGS)
 #ucdet_LDFLAGS = $(LIBCHSETDET_LIBS) $(AM_LDFLAGS)
@@ -46,8 +50,8 @@ ucdet_LDADD +=/usr/lib/libchsetdet.a
 
 
 
-AM_LDFLAGS=$(OPTS)
-AM_CPPFLAGS=$(OPTS)
+AM_LDFLAGS+=$(OPTS)
+AM_CPPFLAGS+=$(OPTS)
 
 DEFS+= \
     `getconf LFS_CFLAGS` \
@@ -73,8 +77,8 @@ if USE_ICONV
 DEFS+= -DUSE_ICONV=1
 #AM_LDFLAGS+=-L/usr/lib/x86_64-linux-gnu/
 #AM_LDFLAGS += -liconv # iconv is a part of glib now, yum install glibc-common
-#AM_CPPFLAGS += `pkg-config --cflags libchsetdet`
-#AM_LDFLAGS += `pkg-config --libs libchsetdet`
+#AM_CPPFLAGS += `pkg-config --cflags libucd`
+#AM_LDFLAGS += `pkg-config --libs libucd`
 AM_CPPFLAGS += $(LIBCHSETDET_CFLAGS)
 AM_LDFLAGS += $(LIBCHSETDET_LIBS)
 

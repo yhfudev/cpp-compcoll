@@ -152,8 +152,8 @@ if test x$have_iconv = xno; then
     dnl AC_CHECK_LIB(icu, ucsdet_open, [],
     dnl         [AC_MSG_ERROR([library 'icu' is required for ICU]), [ `icu-config --ldflags` ]])
 else
-PKG_CHECK_MODULES([LIBCHSETDET], [libchsetdet])
-#AC_CHECK_LIB([chsetdet], [ucsdet_open])
+PKG_CHECK_MODULES([LIBCHSETDET], [libucd])
+#AC_CHECK_LIB([ucd], [ucd_open])
 AC_SUBST(LIBCHSETDET_CFLAGS)
 AC_SUBST(LIBCHSETDET_LIBS)
 
