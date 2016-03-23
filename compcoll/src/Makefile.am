@@ -8,6 +8,9 @@ bin_PROGRAMS=compcoll ucdet htmlescape
 
 compcoll_SOURCES= \
     getline.c \
+    editdistance.c \
+    utf8utils.c \
+    mymat.c \
     compcoll.c \
     $(NULL)
 
